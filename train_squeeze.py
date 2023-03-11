@@ -13,6 +13,7 @@ import time
 import pandas as pd
 import PIL
 from tqdm import tqdm
+import os
 
 # set up the device
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -238,3 +239,4 @@ evaluate(model_loaded, black_women_ds)
 print("--ABOVE IS BLACK WOMEN--\n")
 
 # %%
+
