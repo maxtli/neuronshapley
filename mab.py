@@ -1,146 +1,44 @@
 # %%
-import torchvision
+from datasets import get_combined_gender_loader, get_celeb_data_loaders
+from model import get_squeezenet, epoch
+
 import torch as t
+import torch.nn as nn
 import torch.nn.functional as f
 import numpy as np
 import math
-from torch import nn
 from functools import partial
-from torch.utils.data import TensorDataset
-import random
 from tqdm import tqdm
 import pickle
-import time
-import os
-import pandas as pd
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
-import PIL
-from multiprocessing import Pool
-
 
 # %%
 
-df = pd.read_csv("data/celeba/list_attr_celeba.csv", index_col="image_id")
-genders = df["Male"]
+# configure model and data
+device = "cuda" if t.cuda.is_available() else "cpu"
+model = get_squeezenet(weights_path="squeezenet.pth", device=device)
 
-# %%
-
-
-class CelebDataset(Dataset):
-    def __init__(self, img_dir, transform, target_transform=None):
-        self.img_dir = img_dir  # where all the images are
-        self.img_labels = list(sorted(os.listdir(img_dir)))
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.img_labels)
-
-    def __getitem__(self, idx):
-        img_path = os.path.join(self.img_dir, self.img_labels[idx])
-        image = PIL.Image.open(img_path)
-        label = int((genders[self.img_labels[idx]] + 1) / 2)  # convert from -1,1 to 0,1
-        image = self.transform(image)
-        return image, label
-
-
-transform = transforms.Compose(
-    [
-        transforms.Resize(227),
-        transforms.CenterCrop(227),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    ]
+celeba_train_loader, celeba_val_loader = get_celeb_data_loaders(
+    batch_size=128, num_workers=2
 )
-
-val_set = CelebDataset(img_dir="data/celeba/val", transform=transform)
-val_loader = DataLoader(val_set, batch_size=32, shuffle=True, num_workers=2)
+genders_loader = get_combined_gender_loader(batch_size=128, num_workers=2)
 
 # %%
 
-
-df = pd.read_csv("data/fairface/fairface_label_val.csv", index_col="file")
-
-ages = (
-    (df["age"] != "3-9")
-    * (df["age"] != "10-19")
-    * (df["age"] != "60-69")
-    * (df["age"] != "more than 70")
-)
-white_men = df.loc[(df["race"] == "White") * (df["gender"] == "Male") * ages][:500]
-white_women = df.loc[(df["race"] == "White") * (df["gender"] == "Female") * ages][:500]
-black_men = df.loc[(df["race"] == "Black") * (df["gender"] == "Male") * ages][:500]
-black_women = df.loc[(df["race"] == "Black") * (df["gender"] == "Female") * ages][:500]
-
-
-class FairfaceDataset(Dataset):
-    def __init__(self, img_dir, transform, target_df):
-        self.img_dir = img_dir
-        self.img_labels = target_df.index  # the filenames
-        self.transform = transform
-        self.target = int(target_df["gender"][0] == "Male")
-
-    def __len__(self):
-        return len(self.img_labels)
-
-    def __getitem__(self, idx):
-        img_path = os.path.join(self.img_dir, self.img_labels[idx])
-        image = PIL.Image.open(img_path)
-        image = self.transform(image)
-        return image, self.target
-
-
-white_men_ds = FairfaceDataset("data/fairface", transform, white_men)
-white_women_ds = FairfaceDataset("data/fairface", transform, white_women)
-black_men_ds = FairfaceDataset("data/fairface", transform, black_men)
-black_women_ds = FairfaceDataset("data/fairface", transform, black_women)
-
-# combine all datasets into one dataloader
-combined_dataset = t.utils.data.ConcatDataset(
-    [white_men_ds, white_women_ds, black_men_ds, black_women_ds]
-)
-combined_dataloader = DataLoader(
-    combined_dataset, batch_size=128, shuffle=True, num_workers=2
-)
-
-# # batch is entire dataset
-# white_men_dataloader = DataLoader(
-#     white_men_ds, batch_size=500, shuffle=True, num_workers=2
-# )
-# white_women_dataloader = DataLoader(
-#     white_women_ds, batch_size=500, shuffle=True, num_workers=2
-# )
-# black_men_dataloader = DataLoader(
-#     black_men_ds, batch_size=500, shuffle=True, num_workers=2
-# )
-# black_women_dataloader = DataLoader(
-#     black_women_ds, batch_size=500, shuffle=True, num_workers=2
-# )
-
-# %%
-model = torchvision.models.squeezenet1_1(pretrained=True)
-model.classifier[1] = nn.Conv2d(512, 2, kernel_size=(1, 1), stride=(1, 1))
-model.num_classes = 2
-
-device = t.device("cuda:0" if t.cuda.is_available() else "cpu")
-model.load_state_dict(t.load("squeezenet.pth"))
-model = model.to(device)
-model.eval()
-
-# %%
-
+# get all conv layers (where we'll be ablating)
 convs = list(filter(lambda x: isinstance(x, nn.Conv2d), list(model.modules())))
 
+# get total number of conv filters
 filt_len = sum([c.out_channels for c in convs])
 
+# form ablation array, where 0 -> don't ablate, and 1 -> ablate.
 ablations = np.zeros(filt_len)
 
 # %%
 
-# SKIP if not storing means
-
+# get means of every filter, calculated from val_loader CelebA data
 mean_dict = dict()
-# store mean of every filter, calculated from val_loader CelebA data
+
+
 def mean_hook(module, input, output):
     means = t.mean(output.relu(), dim=0, keepdim=True)
     # add value to mean_dict[module] if it exists, otherwise create it
@@ -153,34 +51,25 @@ def forward_pass_store_means(loader):
     for conv in convs:
         handlers.append(conv.register_forward_hook(mean_hook))
 
-    with t.no_grad():
-        running_loss = running_acc = 0
-        for data, target in loader:
-            data, target = data.to(device), target.to(device)
-            output = model(data)
-            running_loss += f.cross_entropy(output, target)
-            pred = output.argmax(dim=1)
-            running_acc += (pred == target).sum().item() / len(pred)
-
-    acc = running_acc / len(loader)
+    epoch(model, loader, nn.CrossEntropyLoss(), None, device)
 
     for h in handlers:
         h.remove()
 
 
-forward_pass_store_means(val_loader)
+forward_pass_store_means(celeba_val_loader)
 for key in mean_dict:
-    mean_dict[key] /= len(val_loader)
+    mean_dict[key] /= len(celeba_val_loader)
 
 # %%
 
-
+# hook for ablating filters during forward pass according to `ablate_mask`
 def mean_ablation_hook(module, input, output, ablate_mask):
     output[:, ablate_mask] = mean_dict[module][:, ablate_mask]
     return output
 
 
-# ablations[i] is 1 if we want to ablate neuron i
+# forward pass with ablation for *a single batch* from loader
 def forward_pass(ablations, loader):
     start_idx = 0
     handlers = []
@@ -192,12 +81,13 @@ def forward_pass(ablations, loader):
             )
         )
         start_idx += conv.out_channels
-    
-    data, target = next(iter(loader))
-    data, target = data.to(device), target.to(device)
-    output = model(data)
-    pred = output.argmax(dim=1)
-    acc = (pred == target).sum().item() / len(pred)
+
+    with t.no_grad():
+        data, target = next(iter(loader))
+        data, target = data.to(device), target.to(device)
+        output = model(data)
+        pred = output.argmax(dim=1)
+        acc = (pred == target).sum().item() / len(pred)
 
     for h in handlers:
         h.remove()
@@ -211,22 +101,7 @@ truncate_threshold = 0.52
 epsilon = 0.001
 
 relevant_neurons = set(range(filt_len))
-
-# data_loaders = [
-#     white_men_dataloader,
-#     white_women_dataloader,
-#     black_men_dataloader,
-#     black_women_dataloader,
-# ]
-
 all_neuron_acc = forward_pass(np.zeros(filt_len), combined_dataloader)
-# all_neuron_acc = sum(forward_pass(ablate_mask, data_loaders)) / len(data_loaders)
-
-# start = time.time()
-# forward_pass_normal(combined_dataloader)
-# print("all neuron acc", all_neuron_acc)
-# print("time", time.time() - start)
-
 
 # %%
 shapley_values = np.zeros(filt_len)
@@ -319,21 +194,120 @@ delta = 0.1
 k = 100
 i = 0
 
-# %% 
-for i in range(200):
-    num_relevant = update_once(delta, k)
-    if i % 5 == 0:
-        pickle.dump("iterations.pkl", i)
-        pickle.dump("shapley_values.pkl", shapley_values)
-        pickle.dump("variances.pkl", variances)
-        pickle.dump("cb.pkl", cb)
-        pickle.dump("samples.pkl", samples)
+# %%
+# for i in range(200):
+#     num_relevant = update_once(delta, k)
+#     if i % 5 == 0:
+#         with open("iterations.pkl", "wb") as pickle_file:
+#             pickle.dump(i, pickle_file)
+#         with open("shapley_values.pkl", "wb") as pickle_file:
+#             pickle.dump(shapley_values, pickle_file)
+#         with open("variances.pkl", "wb") as pickle_file:
+#             pickle.dump(variances, pickle_file)
+#         with open("cb.pkl", "wb") as pickle_file:
+#             pickle.dump(cb, pickle_file)
+#         with open("samples.pkl", "wb") as pickle_file:
+#             pickle.dump(samples, pickle_file)
 
-    if num_relevant == 1:
-        break
+#     if num_relevant == 1:
+#         break
 
-neurons = np.sort(np.partition(shapley_values, -k)[-k:])
-print(neurons)
+# neurons = np.sort(np.partition(shapley_values, -k)[-k:])
+# print(neurons)
+
+# %%
+
+# load in shapeley values
+with open("shapley_values.pkl", "rb") as pickle_file:
+    shapley_values = pickle.load(pickle_file)
+
+shapley_values.sort()
+print(sum(shapley_values))
+print(sum(shapley_values[-100:]))
+
+# %%
+
+# batch is entire dataset
+white_men_dataloader = DataLoader(
+    white_men_ds, batch_size=500, shuffle=True, num_workers=2
+)
+white_women_dataloader = DataLoader(
+    white_women_ds, batch_size=500, shuffle=True, num_workers=2
+)
+black_men_dataloader = DataLoader(
+    black_men_ds, batch_size=500, shuffle=True, num_workers=2
+)
+black_women_dataloader = DataLoader(
+    black_women_ds, batch_size=500, shuffle=True, num_workers=2
+)
+
+with open("shapley_values.pkl", "rb") as pickle_file:
+    shapley_values = pickle.load(pickle_file)
+
+neurons_sorted = np.argsort(shapley_values)  # ascending order
+
+
+def check_score(ablate_mask):
+    wm_acc = forward_pass(ablate_mask, white_men_dataloader)
+    print("White men", wm_acc)
+    ww_acc = forward_pass(ablate_mask, white_women_dataloader)
+    print("White women", ww_acc)
+    bm_acc = forward_pass(ablate_mask, black_men_dataloader)
+    print("Black men", bm_acc)
+    bw_acc = forward_pass(ablate_mask, black_women_dataloader)
+    print("Black women", bw_acc)
+    overall_acc = sum([wm_acc, ww_acc, bm_ac, bw_acc]) / 4
+    print("overall", overall_acc)
+    print(len(celeba_val_loader))
+    celeba_acc = forward_pass(
+        ablate_mask, celeba_val_loader
+    )  # TODO uses new batch every iteration, weird
+    print("celeba", celeba_acc)
+
+    return wm_acc, ww_acc, bm_acc, bw_acc, overall_acc, celeba_acc
+
+
+ablate_mask = np.zeros(filt_len)
+check_score(ablate_mask)
+
+wm_accs, ww_accs, bm_accs, bw_accs, overall_accs, celeba_accs = [], [], [], [], [], []
+for i in tqdm(range(30)):
+    ablate_mask[neurons_sorted[-i - 1]] = 1
+    wm_acc, ww_acc, bm_ac, bw_acc, overall_acc, celeba_acc = check_score(ablate_mask)
+    wm_accs.append(wm_acc)
+    ww_accs.append(ww_acc)
+    bm_accs.append(bm_ac)
+    bw_accs.append(bw_acc)
+    overall_accs.append(overall_acc)
+    celeba_accs.append(celeba_acc)
+
+# %%
+
+import matplotlib.pyplot as plt
+
+plt.hist(shapley_values, bins=100)
+plt.show()
+
+plt.plot(celeba_accs, label="celeba")
+plt.plot(wm_accs, label="white men")
+plt.plot(ww_accs, label="white women")
+plt.plot(bm_accs, label="black men")
+plt.plot(bw_accs, label="black women")
+plt.plot(overall_accs, label="overall")
+plt.legend()
+plt.xlabel("Number of filters ablated")
+plt.ylabel("Test Accuracy (%)")
+
+
+# %%
+
+# load in iterations.pkl
+with open("iterations.pkl", "rb") as pickle_file:
+    iterations_pk = pickle.load(pickle_file)
+print(iterations_pk)
+
+
+# %%
 
 # # samples = total number of samples
 # def moving_average(samples, prev_mean, x_n):
@@ -348,10 +322,3 @@ print(neurons)
 
 # shapley_values += value_updates
 # variances[relevant_neurons] = ((samples[relevant_neurons] - 1) * (variances[relevant_neurons] + np.square(value_updates[relevant_neurons])) + np.square(differential[relevant_neurons] - shapley_values[relevant_neurons])) / samples[relevant_neurons]
-
-
-# %%
-
-with Pool(3) as p:
-    print(p.starmap(forward_pass, [(np.zeros(filt_len), combined_dataset), (np.zeros(filt_len), combined_dataset), (np.zeros(filt_len), combined_dataset)]))
-# %%
