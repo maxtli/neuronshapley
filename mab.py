@@ -49,7 +49,7 @@ def init_shapley(iters=3000, load=True):
     for j in range(iters):
         relevant_neurons = update_once(shapley_values, variances, cb, samples, truncate_threshold, epsilon, delta, k, relevant_neurons, max_loss, all_neuron_acc, conv_means)
         num_relevant = len(relevant_neurons)
-        if j % 5 == 0:
+        if j % 5 == 4:
             with open("iterations.pkl", "wb") as pickle_file:
                 pickle.dump(i + j, pickle_file)
             with open("shapley_values.pkl", "wb") as pickle_file:
@@ -125,7 +125,7 @@ def update_once(shapley_values, variances, cb, samples, truncate_threshold, epsi
             + (differential - shapley_values[neuron]) ** 2
         ) / samples[neuron]
 
-        if k % 30 == 0:
+        if k % 30 == 0 and prev_loss >= truncate_threshold:
             print("acc", prev_loss)
 
         # I think ghorbani forgets to do a union bound here, twice.
