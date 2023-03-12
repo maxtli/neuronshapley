@@ -24,7 +24,7 @@ def load_shapley():
 shapley_values, variances, cb, samples, i = load_shapley()
 
 def init_shapley(iters=3000, load=True):
-    truncate_threshold = 0.52
+    truncate_threshold = 0.51
     epsilon = 0.001
     delta = 0.1
     k = 100

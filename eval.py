@@ -1,5 +1,5 @@
 # %%
-from ablation import filt_len, celeba_val_loader, load_conv_means, forward_pass
+from ablation import filt_len, celeba_val_loader, load_conv_means, forward_pass, get_gender_dataloaders
 
 import numpy as np
 from tqdm import tqdm
@@ -20,7 +20,7 @@ print(sum(shapley_values[-100:]))
 # batch is entire dataset
 white_men_dataloader, white_women_dataloader, black_men_dataloader, black_women_dataloader = get_gender_dataloaders()
 
-with open("shapley_values.pkl", "rb") as pickle_file:
+with open("shapley_values_first_iter.pkl", "rb") as pickle_file:
     shapley_values = pickle.load(pickle_file)
 
 neurons_sorted = np.argsort(shapley_values)  # ascending order
@@ -29,20 +29,20 @@ neurons_sorted = np.argsort(shapley_values)  # ascending order
 def check_score(ablate_mask):
     conv_means = load_conv_means()
     wm_acc = forward_pass(ablate_mask, conv_means, white_men_dataloader)
-    print("White men", wm_acc)
     ww_acc = forward_pass(ablate_mask, conv_means, white_women_dataloader)
-    print("White women", ww_acc)
     bm_acc = forward_pass(ablate_mask, conv_means, black_men_dataloader)
-    print("Black men", bm_acc)
     bw_acc = forward_pass(ablate_mask, conv_means, black_women_dataloader)
-    print("Black women", bw_acc)
     overall_acc = sum([wm_acc, ww_acc, bm_acc, bw_acc]) / 4
-    print("overall", overall_acc)
-    print(len(celeba_val_loader))
+    # print("White men", wm_acc)
+    # print("White women", ww_acc)
+    # print("Black men", bm_acc)
+    # print("Black women", bw_acc)
+    # print("overall", overall_acc)
+    # print(len(celeba_val_loader))
     celeba_acc = forward_pass(
         ablate_mask, conv_means, celeba_val_loader
     )  # TODO uses new batch every iteration, weird
-    print("celeba", celeba_acc)
+    # print("celeba", celeba_acc)
 
     return wm_acc, ww_acc, bm_acc, bw_acc, overall_acc, celeba_acc
 
