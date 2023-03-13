@@ -31,5 +31,4 @@ Necessary Datasets:
   year = {2020},
   copyright = {arXiv.org perpetual, non-exclusive license}
 }
-}
 ```
