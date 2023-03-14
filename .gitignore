@@ -2,3 +2,7 @@ data/*
 archive.zip
 squeezenet.pth
 *.zip
+bad old values/*
+GOOD shap/*
+pics/*
+shap_records/*

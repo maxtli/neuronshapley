@@ -74,7 +74,7 @@ def get_celeb_data_loaders(batch_size=32, num_workers=2):
     return train_loader, val_loader
 
 
-def get_gender_datasets(num_images=500):
+def get_gender_datasets(num_images=200, val=False):
     # Load the fairface dataset, filtered to be in 20-59 age range and only white/black
     df = pd.read_csv("data/fairface/fairface_label_val.csv", index_col="file")
     ages = (
@@ -83,18 +83,22 @@ def get_gender_datasets(num_images=500):
         * (df["age"] != "60-69")
         * (df["age"] != "more than 70")
     )
-    white_men = df.loc[(df["race"] == "White") * (df["gender"] == "Male") * ages][
-        :num_images
-    ]
-    white_women = df.loc[(df["race"] == "White") * (df["gender"] == "Female") * ages][
-        :num_images
-    ]
-    black_men = df.loc[(df["race"] == "Black") * (df["gender"] == "Male") * ages][
-        :num_images
-    ]
-    black_women = df.loc[(df["race"] == "Black") * (df["gender"] == "Female") * ages][
-        :num_images
-    ]
+
+    white_men = df.loc[(df["race"] == "White") * (df["gender"] == "Male") * ages]
+    white_women = df.loc[(df["race"] == "White") * (df["gender"] == "Female") * ages]
+    black_men = df.loc[(df["race"] == "Black") * (df["gender"] == "Male") * ages]
+    black_women = df.loc[(df["race"] == "Black") * (df["gender"] == "Female") * ages]
+
+    if val:
+        white_men = white_men[-num_images:]
+        white_women = white_women[-num_images:]
+        black_men = black_men[-num_images:]
+        black_women = black_women[-num_images:]
+    else:
+        white_men = white_men[:num_images]
+        white_women = white_women[:num_images]
+        black_men = black_men[:num_images]
+        black_women = black_women[:num_images]
 
     white_men_ds = FairfaceDataset("data/fairface", transform, white_men)
     white_women_ds = FairfaceDataset("data/fairface", transform, white_women)
@@ -104,10 +108,11 @@ def get_gender_datasets(num_images=500):
     return white_men_ds, white_women_ds, black_men_ds, black_women_ds
 
 
-def get_gender_dataloaders(batch_size=128, num_workers=2):
+def get_gender_dataloaders(batch_size=128, num_images_each=200, num_workers=2, val=False):
     white_men_ds, white_women_ds, black_men_ds, black_women_ds = get_gender_datasets(
-        num_images=500
-    )
+            num_images=num_images_each,
+            val=val
+        )
 
     white_men_loader = DataLoader(
         white_men_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers
@@ -125,9 +130,10 @@ def get_gender_dataloaders(batch_size=128, num_workers=2):
     return white_men_loader, white_women_loader, black_men_loader, black_women_loader
 
 
-def get_combined_gender_loader(batch_size=128, num_workers=2):
+def get_combined_gender_loader(batch_size=128, num_images_each=200, num_workers=2, val=False):
     white_men_ds, white_women_ds, black_men_ds, black_women_ds = get_gender_datasets(
-        num_images=500
+        num_images=num_images_each,
+        val=val
     )
 
     combined_dataset = ConcatDataset(
