@@ -16,9 +16,6 @@ Necessary Datasets:
 - `./data/celeba` should contain the CelebA dataset, stored as `*.jpg` files within `test`, `train`, and `val` subfolders. The attributes files should be stored in `list_landmarks_align_celeba.csv`
 - `./data/fairface` should contain the FairFace dataset, with `train` and `val` subfolders and a `fairface_label_val.csv` label file. 
 
-*Reproducibility note: running `eval.py` will reproduce the above figure using the precomputed shapley values in `shaple_values.pkl` on a small subset of the CelebA and FairFace dataset we've included in this repository. Replicating the MAB algorithm and our full results require dataset downloads.*
-
-
 ## Citation
 ```BibTex
 @article{@misc{https://doi.org/10.48550/arxiv.2002.09815,
@@ -30,6 +27,5 @@ Necessary Datasets:
   publisher = {arXiv},
   year = {2020},
   copyright = {arXiv.org perpetual, non-exclusive license}
-}
 }
 ```
