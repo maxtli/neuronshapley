@@ -7,19 +7,20 @@ import pickle
 from ablation import filt_len, load_conv_means, forward_pass, genders_loader
 from eval import save_plots
 
+
 # %%
 
 # load previously saved shapley values to continue iterating
 def load_shapley():
-    with open("shapley_values.pkl", "rb") as pickle_file:
+    with open("cur_records/shapley_values.pkl", "rb") as pickle_file:
         shapley_values = pickle.load(pickle_file)
-    with open("variances.pkl", "rb") as pickle_file:
+    with open("cur_records/variances.pkl", "rb") as pickle_file:
         variances = pickle.load(pickle_file)
-    with open("cb.pkl", "rb") as pickle_file:
+    with open("cur_records/cb.pkl", "rb") as pickle_file:
         cb = pickle.load(pickle_file)
-    with open("samples.pkl", "rb") as pickle_file:
+    with open("cur_records/samples.pkl", "rb") as pickle_file:
         samples = pickle.load(pickle_file)
-    with open("iterations.pkl", "rb") as pickle_file:
+    with open("cur_records/iterations.pkl", "rb") as pickle_file:
         i = pickle.load(pickle_file)
     return shapley_values, variances, cb, samples, i
 
@@ -67,15 +68,15 @@ def init_shapley(iters=3000, load=True):
 
         # save state to files every 5 iterations
         if cur_iters % 5 == 4:
-            with open("iterations.pkl", "wb") as pickle_file:
+            with open("cur_records/iterations.pkl", "wb") as pickle_file:
                 pickle.dump(cur_iters, pickle_file)
-            with open("shapley_values.pkl", "wb") as pickle_file:
+            with open("cur_records/shapley_values.pkl", "wb") as pickle_file:
                 pickle.dump(shapley_values, pickle_file)
-            with open("variances.pkl", "wb") as pickle_file:
+            with open("cur_records/variances.pkl", "wb") as pickle_file:
                 pickle.dump(variances, pickle_file)
-            with open("cb.pkl", "wb") as pickle_file:
+            with open("cur_records/cb.pkl", "wb") as pickle_file:
                 pickle.dump(cb, pickle_file)
-            with open("samples.pkl", "wb") as pickle_file:
+            with open("cur_records/samples.pkl", "wb") as pickle_file:
                 pickle.dump(samples, pickle_file)
             with open(f"shap_records/shapley_values/{cur_iters}.pkl", "wb") as pickle_file:
                 pickle.dump(shapley_values, pickle_file)
@@ -182,3 +183,4 @@ def update_once(shapley_values, variances, cb, samples, truncate_threshold, epsi
 # %%
 if __name__ == "__main__":
     init_shapley()
+# %%

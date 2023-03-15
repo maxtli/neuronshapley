@@ -7,10 +7,10 @@ Organization:
 - `datasets.py` configures the [CelebA](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html) and [FairFace](https://github.com/joojs/fairface) datasets and dataloaders.
 - `model.py` configures a [SqueezeNet](https://arxiv.org/abs/1602.07360) model for the binary gender detection class. It also defines a `epoch` function, which is a generic train/test loop.
 - `train_squeeze.py` finetunes a ImageNet-pretrained SqueezeNet on a gender detection task from the CelebA dataset, and evaluates the resulting model on 500 images from each Black/White Male/Female split of FairFace.
-- `mab.py` finds Shapley values for each filter on the FairFace dataset using the multi-armed bandit algorithm described by Ghorbani et al., and outputs approximations of filter shapley values to `shapley_values.pkl`.
+- `mab.py` finds Shapley values for each filter on the FairFace dataset using the multi-armed bandit algorithm described by Ghorbani et al., and outputs approximations of filter shapley values to `cur_records/shapley_values.pkl`.
 - `eval.py` evaluates the accuracy on FairFace (decomposed by race and gender) when removing filters with negative shapley values.
 - `squeezenet.pth` stores the weights of a SqueezeNet after two epochs of fine tuning on the CelebA gender detection task.
-- `shapley_values.pkl` stores the shapley values obtained after 424 iterations of the MAB algorithm.
+- `cur_records/shapley_values.pkl` stores the shapley values obtained after 809 iterations of the MAB algorithm.
 
 Necessary Datasets:
 - `./data/celeba` should contain the CelebA dataset, stored as `*.jpg` files within `test`, `train`, and `val` subfolders. The attributes files should be stored in `list_landmarks_align_celeba.csv`

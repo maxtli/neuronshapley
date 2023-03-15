@@ -29,11 +29,12 @@ def check_score(ablate_mask, conv_means):
     bm_acc = forward_pass(ablate_mask, conv_means, black_men_dataloader)
     bw_acc = forward_pass(ablate_mask, conv_means, black_women_dataloader)
     overall_acc = sum([wm_acc, ww_acc, bm_acc, bw_acc]) / 4
-    # print("White men", wm_acc)
-    # print("White women", ww_acc)
-    # print("Black men", bm_acc)
-    # print("Black women", bw_acc)
-    # print("overall", overall_acc)
+    # if verbose:
+    #     print("White men", wm_acc)
+    #     print("White women", ww_acc)
+    #     print("Black men", bm_acc)
+    #     print("Black women", bw_acc)
+    #     print("overall", overall_acc)
     # print(len(celeba_val_loader))
     celeba_acc = 0
     # celeba_acc = forward_pass(
@@ -59,7 +60,12 @@ def save_plots(iters=False):
     
     check_score(ablate_mask, conv_means)
     wm_accs, ww_accs, bm_accs, bw_accs, overall_accs, celeba_accs = [], [], [], [], [], []
-    for i in tqdm(range(30)):
+    
+    acc_max = 0
+    indiv_acc_max = []
+    acc_max_idx = 0
+
+    for i in tqdm(range(50)):
         # print("shapley value", shapley_values[neurons_sorted[-i - 1]])
         ablate_mask[neurons_sorted[-i - 1]] = 1
         wm_acc, ww_acc, bm_ac, bw_acc, overall_acc, celeba_acc = check_score(ablate_mask, conv_means)
@@ -69,6 +75,11 @@ def save_plots(iters=False):
         bw_accs.append(bw_acc)
         overall_accs.append(overall_acc)
         celeba_accs.append(celeba_acc)
+
+        if overall_acc >= acc_max:
+            indiv_acc_max = [wm_acc, ww_acc, bm_ac, bw_acc]
+            acc_max = overall_acc
+            acc_max_idx = i
     
     plt.hist(shapley_values, bins=100)
     plt.show()
@@ -86,6 +97,10 @@ def save_plots(iters=False):
     plt.ylabel("Test Accuracy (%)")
     plt.show()
     plt.savefig(f"pics/accs/{iters}.png")
+
+    print(acc_max)
+    print(acc_max_idx)
+    print(indiv_acc_max)
 
 # %%
 if __name__ == "__main__":
